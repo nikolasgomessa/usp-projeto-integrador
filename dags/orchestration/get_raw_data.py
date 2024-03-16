@@ -21,9 +21,10 @@ def get_aws_credentials(conn_id):
 
 def run_raw():
     source_bucket = 'ooni-data'
-    dest_bucket = '975050372651-raw'
-    source_prefix = 'autoclaved/jsonl/2020'
+    dest_bucket = 'raw-975050372651'
+    source_prefix = 'autoclaved/jsonl/'
     aws_conn_id = "aws_default"
+    desired_test_type = "web_connectivity"
 
     credentials = get_aws_credentials(aws_conn_id)
 
@@ -43,15 +44,15 @@ def run_raw():
 
             country = split_data_type[1]
             test_type = split_data_type[3]
-
-            dest_key = os.path.join(source_date, country, test_type, os.path.basename(source_key))
-
-            # Copia o objeto
-            response = s3_client.copy_object(
-                Bucket=dest_bucket,
-                CopySource={'Bucket': source_bucket, 'Key': source_key},
-                Key=dest_key
-            )
+    
+            if test_type == desired_test_type:
+                dest_key = os.path.join(source_date, country, test_type, os.path.basename(source_key))
+                # Copia o objeto
+                response = s3_client.copy_object(
+                    Bucket=dest_bucket,
+                    CopySource={'Bucket': source_bucket, 'Key': source_key},
+                    Key=dest_key
+                )
 
 # ---------- Pipeline Tasks ----------------------------------------------------------------------------------------- #
 
