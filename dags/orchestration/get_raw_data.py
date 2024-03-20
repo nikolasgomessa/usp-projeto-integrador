@@ -19,12 +19,15 @@ def get_aws_credentials(conn_id):
         'region_name': session.extra_dejson.get('region_name')
     }
 
-def run_raw():
+def run_raw(**kwargs):
     source_bucket = 'ooni-data'
     dest_bucket = 'raw-975050372651'
-    source_prefix = 'autoclaved/jsonl/'
+    source_prefix = f'autoclaved/jsonl/{kwargs["params"]["ano"]}'
     aws_conn_id = "aws_default"
     desired_test_type = "web_connectivity"
+
+    countries_to_consider = ["BR", "CN", "FR", "RU", "GB", "US", "MY", "DE", "IN", "AR"]
+
 
     credentials = get_aws_credentials(aws_conn_id)
 
@@ -44,29 +47,36 @@ def run_raw():
 
             country = split_data_type[1]
             test_type = split_data_type[3]
-    
-            if test_type == desired_test_type:
-                dest_key = os.path.join(source_date, country, test_type, os.path.basename(source_key))
-                # Copia o objeto
-                response = s3_client.copy_object(
-                    Bucket=dest_bucket,
-                    CopySource={'Bucket': source_bucket, 'Key': source_key},
-                    Key=dest_key
-                )
 
+            if test_type == desired_test_type and country in countries_to_consider:
+                dest_key = os.path.join(source_date, country, test_type, os.path.basename(source_key))
+                
+                # Verifica se o arquivo já existe no bucket de destino
+                try:
+                    s3_client.head_object(Bucket=dest_bucket, Key=dest_key)
+                    # Se o arquivo já existe, não faz nada
+                    print(f"O arquivo {dest_key} já existe no bucket de destino.")
+                except:
+                    # Se o arquivo não existe, faça a cópia do objeto
+                    print(f"Copiando {source_key} para {dest_key}")
+                    response = s3_client.copy_object(
+                        Bucket=dest_bucket,
+                        CopySource={'Bucket': source_bucket, 'Key': source_key},
+                        Key=dest_key
+                    )
 # ---------- Pipeline Tasks ----------------------------------------------------------------------------------------- #
 
 default_args = {
     "owner": "airflow",
-    "depends_on_past": True,
-    "wait_for_downstream": True,
+    "depends_on_past": False,
+    "wait_for_downstream": False,
     "start_date": datetime(2023, 8, 1)
 }
 
 with DAG('get_raw_data',
          schedule_interval= None,  
          catchup=False, 
-         max_active_runs=1, 
+         max_active_runs=45, 
          default_args=default_args,
          tags=['s3']) as dag:
 
