@@ -21,12 +21,12 @@ def get_aws_credentials(conn_id):
 
 def run_raw(**kwargs):
     source_bucket = 'ooni-data'
-    dest_bucket = 'raw-975050372651'
+    dest_bucket = '975050372651-raw'
     source_prefix = f'autoclaved/jsonl/{kwargs["params"]["ano"]}'
     aws_conn_id = "aws_default"
     desired_test_type = "web_connectivity"
 
-    countries_to_consider = ["BR", "CN", "FR", "RU", "GB", "US", "MY", "DE", "IN", "AR"]
+    countries_to_consider = ["BR", "CN", "FR", "RU", "GB", "US", "DE", "IN", "AR"]
 
 
     credentials = get_aws_credentials(aws_conn_id)
