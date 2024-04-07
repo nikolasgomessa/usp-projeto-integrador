@@ -1,0 +1,25 @@
+{
+    "local_conf": {
+        "local_sub_folder": "/computation/src/pyspark_scripts/",
+        "spark_script": "transform_trusted.py"
+    },
+    "s3_conf": {
+        "bucket_name": "775307465848-scripts",
+        "bucket_name_dep": "775307465848-dependencies",
+        "s3_script": "scripts/transform_trusted.py"
+    },
+    "spark_submit_cmd": {
+        "cmd": "[\"spark-submit\", \"--deploy-mode\", \"client\"]"
+    },
+    "spark_conf": {
+        "spark.sql.session.timeZone": "UTC",
+        "spark.speculation": "false"
+    },
+    "spark_jars_conf": {
+        "bucket_prefix": "s3://{bucket_name}/dags",
+        "bucket_subfolder": "/jars/"
+    },
+    "spark_jars_conf_value": [
+        "deequ-2.0.4-spark-3.3.jar"
+    ]
+}

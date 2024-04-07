@@ -1,14 +1,6 @@
-import os
-import json
-import itertools
-import logging
-from datetime import datetime, timedelta
-import boto3
-###
-from airflow import DAG
 from airflow.models import Connection
-from airflow.operators.python import PythonOperator
-
+import boto3
+import os
 
 def get_aws_credentials(conn_id):
     session = Connection.get_connection_from_secrets(conn_id)
@@ -64,27 +56,3 @@ def run_raw(**kwargs):
                         CopySource={'Bucket': source_bucket, 'Key': source_key},
                         Key=dest_key
                     )
-# ---------- Pipeline Tasks ----------------------------------------------------------------------------------------- #
-
-default_args = {
-    "owner": "airflow",
-    "depends_on_past": False,
-    "wait_for_downstream": False,
-    "start_date": datetime(2023, 8, 1)
-}
-
-with DAG('get_raw_data',
-         schedule_interval= None,  
-         catchup=False, 
-         max_active_runs=45, 
-         default_args=default_args,
-         tags=['s3']) as dag:
-
-
-    execute_python_raw = PythonOperator(
-        dag=dag,
-        task_id="execute_python_raw",
-        python_callable=run_raw
-    )
-
-    execute_python_raw
