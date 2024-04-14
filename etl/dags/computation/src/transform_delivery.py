@@ -138,7 +138,7 @@ output_directory = f"s3://{args['bucket_delivery']}/delivery"
 write_data = DataWriter()
 write_data.write_parquet(df_ooni, output_directory, ['bucket_date'])
 
-query_create_table = """
+query_create_table = f"""
 CREATE EXTERNAL TABLE IF NOT EXISTS ooni_data.tb_delivery ( 
     id STRING, 
     measurement_start_time TIMESTAMP, 
@@ -157,7 +157,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS ooni_data.tb_delivery (
     http_meta_title STRING, 
     probe_cc STRING)
 PARTITIONED BY(bucket_date STRING) 
-STORED AS PARQUET LOCATION 's3://771030032684-delivery/delivery/';
+STORED AS PARQUET LOCATION 's3://{args['bucket_delivery']}/delivery';
 """
 
 spark.sql("create schema if not exists ooni_data")
