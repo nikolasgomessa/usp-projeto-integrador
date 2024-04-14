@@ -1,7 +1,7 @@
 raw/logs/*
 delivery/logs/*
 trusted/logs/*
-
+etl/logs/*
 
 # Created by https://www.toptal.com/developers/gitignore/api/python
 # Edit at https://www.toptal.com/developers/gitignore?templates=python
