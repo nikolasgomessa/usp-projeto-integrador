@@ -195,8 +195,6 @@ with DAG(
         query=LOG_QUERY_CREATE_TABLE,
         database="ooni_data",
         output_location=f's3://574356460190-athena',
-        sleep_time=30,
-        max_tries=None,
         aws_conn_id="aws_default"
     )
 

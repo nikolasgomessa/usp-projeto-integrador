@@ -397,7 +397,7 @@ def process_raw_with_time_limit(prefix):
     
     thread_it = threading.Thread(target=process_raw, args=(prefix,))
     thread_it.start()
-    timer = threading.Timer(30.0, time_limit)
+    timer = threading.Timer(60.0, time_limit)
     timer.start()
     thread_it.join() 
     timer.cancel()
