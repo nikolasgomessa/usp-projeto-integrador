@@ -377,7 +377,7 @@ def process_raw(prefix):
     objects = extract_data.get_objects()
     df_raw = extract_data.extract(objects)
 
-    transform_data = Transformation(df_raw, spark)
+    transform_data = Transformation(df_raw, spark, bucket_date)
     df_ooni = transform_data.transform()
     df_ooni_validated = transform_data.data_quality(df_ooni)
 
