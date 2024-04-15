@@ -53,42 +53,41 @@ def run_raw(date, **kwargs):
             country = split_data_type[1]
             test_type = split_data_type[3]
 
-            if source_date not in count_size_country:
-                count_size_country[source_date] = {}
+            if test_type == desired_test_type and country in countries_to_consider:
+                if source_date not in count_size_country:
+                    count_size_country[source_date] = {}
 
-            if country not in count_size_country[source_date]:
-                count_size_country[source_date][country] = 0
+                if country not in count_size_country[source_date]:
+                    count_size_country[source_date][country] = 0
 
-            if count_size_country[source_date][country] <= limit_per_country:
-                get_object = s3_client.head_object(Bucket=source_bucket, Key=source_key)
-                size_file_bytes = get_object["ContentLength"]
-                size_file_mb = size_file_bytes / (1024 * 1024)
+                if count_size_country[source_date][country] + min_file_size <= limit_per_country:
+                    get_object = s3_client.head_object(Bucket=source_bucket, Key=source_key)
+                    size_file_bytes = get_object["ContentLength"]
+                    size_file_mb = size_file_bytes / (1024 * 1024)
 
-                if (
-                    test_type == desired_test_type
-                    and country in countries_to_consider
-                    and size_file_mb >= min_file_size
-                    and (count_size_country[source_date][country] + size_file_mb)
-                    <= limit_per_country
-                ):
-                    dest_key = os.path.join(source_date, os.path.basename(source_key))
+                    if (
+                        size_file_mb >= min_file_size
+                        and (count_size_country[source_date][country] + size_file_mb)
+                        <= limit_per_country
+                    ):
+                        dest_key = os.path.join(source_date, os.path.basename(source_key))
 
-                    # Verifica se o arquivo já existe no bucket de destino
-                    try:
-                        s3_client.head_object(Bucket=dest_bucket, Key=dest_key)
-                        # Se o arquivo já existe, não faz nada
-                        print(f"O arquivo {dest_key} já existe no bucket de destino.")
-                    except:
-                        # Se o arquivo não existe, faça a cópia do objeto
-                        print(f"Copiando {source_key} para {dest_key}")
-                        response = s3_client.copy_object(
-                            Bucket=dest_bucket,
-                            CopySource={"Bucket": source_bucket, "Key": source_key},
-                            Key=dest_key,
-                        )
-                        count_size_country[source_date][country] = (
-                            count_size_country[source_date][country] + size_file_mb
-                        )
+                        # Verifica se o arquivo já existe no bucket de destino
+                        try:
+                            s3_client.head_object(Bucket=dest_bucket, Key=dest_key)
+                            # Se o arquivo já existe, não faz nada
+                            print(f"O arquivo {dest_key} já existe no bucket de destino.")
+                        except:
+                            # Se o arquivo não existe, faça a cópia do objeto
+                            print(f"Copiando {source_key} para {dest_key}")
+                            response = s3_client.copy_object(
+                                Bucket=dest_bucket,
+                                CopySource={"Bucket": source_bucket, "Key": source_key},
+                                Key=dest_key,
+                            )
+                            count_size_country[source_date][country] = (
+                                count_size_country[source_date][country] + size_file_mb
+                            )
 
 default_args = {
     "owner": "airflow",
