@@ -137,32 +137,3 @@ df_ooni = transform_data.transform()
 output_directory = f"s3://{args['bucket_delivery']}/delivery"
 write_data = DataWriter()
 write_data.write_parquet(df_ooni, output_directory, ['bucket_date'])
-
-if args['bucket_trusted'].split('/')[0] != args['bucket_delivery']:
-    query_create_table = f"""
-    CREATE EXTERNAL TABLE IF NOT EXISTS ooni_data.tb_delivery ( 
-        id STRING, 
-        measurement_start_time TIMESTAMP, 
-        test_start_time TIMESTAMP, 
-        probe_asn STRING, 
-        probe_ip STRING, 
-        report_id STRING, 
-        test_name STRING, 
-        control_failure STRING, 
-        blocking STRING, 
-        http_experiment_failure STRING, 
-        dns_experiment_failure STRING, 
-        platform STRING, 
-        domain STRING, 
-        http_title STRING, 
-        http_meta_title STRING, 
-        probe_cc STRING)
-    PARTITIONED BY(bucket_date STRING) 
-    STORED AS PARQUET LOCATION 's3://{args['bucket_delivery']}/delivery';
-    """
-
-    spark.sql("create schema if not exists ooni_data")
-    spark.sql(query_create_table)
-    spark.sql("MSCK REPAIR TABLE ooni_data.tb_delivery")
-
-job.commit()

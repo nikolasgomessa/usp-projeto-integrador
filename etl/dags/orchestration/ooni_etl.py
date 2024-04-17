@@ -26,7 +26,7 @@ def get_aws_credentials(conn_id):
 
 def run_raw(date, **kwargs):
     source_bucket = "ooni-data"
-    dest_bucket = "771030032684-raw"
+    dest_bucket = "771030032684-raw-v2"
     source_prefix = f'autoclaved/jsonl/{date}'
     aws_conn_id = "aws_default"
     desired_test_type = "web_connectivity"
@@ -40,7 +40,7 @@ def run_raw(date, **kwargs):
     paginator = s3_client.get_paginator("list_objects_v2")
     pages = paginator.paginate(Bucket=source_bucket, Prefix=source_prefix)
 
-    limit_per_country = 1.5
+    limit_per_country = 100
     min_file_size = 0.3
     count_size_country = {}
 
@@ -135,11 +135,11 @@ with DAG(
                             }, 
                         },
         script_args = {
-            "--bucket_trusted": "574356460190-trusted",
-            "--bucket_logs": "574356460190-logs",
-            "--bucket_raw": "771030032684-raw"
+            "--bucket_trusted": "771030032684-trusted-full",
+            "--bucket_logs": "771030032684-logs-full",
+            "--bucket_raw": "771030032684-raw-v2"
         },
-        s3_bucket = "aws-glue-assets-574356460190-us-east-1"
+        s3_bucket = "aws-glue-assets-771030032684-us-east-1"
     )
 
     delivery_task = GlueJobOperator(
@@ -150,12 +150,15 @@ with DAG(
         script_location='s3://771030032684-scripts/src/transform_delivery.py',
         create_job_kwargs={"GlueVersion": "4.0", "NumberOfWorkers": 10, "WorkerType": "G.1X"},
         script_args = {
-            "--bucket_trusted": "574356460190-trusted",
-            "--bucket_delivery": "574356460190-delivery"
+            "--bucket_trusted": "771030032684-trusted-full",
+            "--bucket_delivery": "771030032684-delivery-full"
         },
-        s3_bucket = "aws-glue-assets-574356460190-us-east-1"
+        s3_bucket = "aws-glue-assets-771030032684-us-east-1"
     )
 
+    LOG_QUERY_CREATE_SCHEMA = """
+        CREATE SCHEMA IF NOT EXISTS ooni_data
+    """
     LOG_QUERY_CREATE_TABLE = """
         CREATE EXTERNAL TABLE IF NOT EXISTS ooni_data.tb_processamento_job ( check string,
             check_level string,
@@ -164,7 +167,7 @@ with DAG(
             constraint_status string,
             constraint_message string,
             bucket_date string ) 
-        STORED AS PARQUET LOCATION 's3://574356460190-logs/validation/trusted/'
+        STORED AS PARQUET LOCATION 's3://771030032684-logs-full/validation/trusted/'
     """
 
     DELIVERY_QUERY_CREATE_TABLE = """
@@ -186,18 +189,26 @@ with DAG(
             http_meta_title STRING, 
             probe_cc STRING,
             bucket_date DATE)
-        STORED AS PARQUET LOCATION 's3://771030032684-delivery/delivery/'
+        STORED AS PARQUET LOCATION 's3://771030032684-delivery-full/delivery/'
     """
+
+    athena_create_schema_task = AWSAthenaOperator(
+        task_id='create_schema',
+        query=LOG_QUERY_CREATE_SCHEMA,
+        database="ooni_data",
+        output_location=f's3://771030032684-athena',
+        aws_conn_id="aws_default"
+    )
 
     athena_logs_table_task = AWSAthenaOperator(
         task_id='log_create_table',
         query=LOG_QUERY_CREATE_TABLE,
         database="ooni_data",
-        output_location=f's3://574356460190-athena',
+        output_location=f's3://771030032684-athena',
         aws_conn_id="aws_default"
     )
 
 
     end_dag = DummyOperator(task_id="end_dag")
 
-    etl_start >> ingestion_tasks >> trusted_task >> athena_logs_table_task >> delivery_task >> end_dag
+    etl_start >> ingestion_tasks >> trusted_task >> athena_create_schema_task >> athena_logs_table_task >> delivery_task >> end_dag

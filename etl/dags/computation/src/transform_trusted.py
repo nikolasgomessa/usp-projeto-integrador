@@ -189,36 +189,17 @@ class UnsupportedFileType(Exception):
         super().__init__(self.message)
 
 class ExtractData:
-    def __init__(self, spark, s3, bucket_raw, bucket_date, file_type: str):
-        self.s3 = s3
-        self.bucket_raw = bucket_raw
-        self.bucket_date = bucket_date
+    def __init__(self, spark, file_directory: list, file_type: str):
+        self.file_directory = file_directory
         self.file_type = file_type
         self.spark = spark
-    
-    def get_objects(self):
-        objects = self.s3.list_objects_v2(
-            Bucket=self.bucket_raw,
-            Prefix=self.bucket_date
-        )
-        return objects
-    
-    def extract(self, objects) -> DataFrame:
-        if self.file_type in ('json'):
-            dfs = []
-            for obj in objects.get('Contents', []):
-                file_key = obj['Key']
-                response = self.s3.get_object(Bucket=self.bucket_raw, Key=file_key)
-                json_data = response['Body'].read().decode('utf-8')
-                
-                response = None
-                df = spark.read.json(spark.sparkContext.parallelize([json_data]), schema=SCHEMA)
-                dfs.append(df)
 
-            union_df = dfs[0]
-            for df in dfs[1:]:
-                union_df = union_df.union(df)
-            return union_df
+    def extract(self) -> DataFrame:
+        if self.file_type in ('json'):
+            return self.spark.read.format("json")\
+                .option("recursiveFileLookup", "true")\
+                .option("pathGlobFilter","*.json")\
+            .load(self.file_directory, schema=SCHEMA)
         else:
             raise UnsupportedFileType(self.file_type)
 
@@ -284,11 +265,13 @@ class Transformation(TransformData):
                                        .withColumn("test_start_time", F.to_timestamp("test_start_time"))
         transformed_df = transformed_df.cache()
         transformed_df = transformed_df.withColumn("row_id", F.md5(F.concat(F.col("id"), F.col("measurement_start_time"), F.col("input"))))\
-                                       .withColumn("is_ip_valid", F.when(F.col("probe_ip").rlike(r"^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$"), F.lit(True)))
+                                       .dropDuplicates(["row_id"])
+        
+                                    #    .withColumn("is_ip_valid", F.when(F.col("probe_ip").rlike(r"^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$"), F.lit(True)))\
         transformed_df = transformed_df.cache()
             
-        transformed_df = transformed_df.withColumn("is_url_valid", F.when(F.col("input").rlike(r"^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$"), F.lit(True)))\
-                                       .dropDuplicates(["row_id"])
+        # transformed_df = transformed_df.withColumn("is_url_valid", F.when(F.col("input").rlike(r"^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$"), F.lit(True)))\
+                                       
 
     
         return transformed_df
@@ -308,9 +291,9 @@ class Transformation(TransformData):
                         .hasCompleteness("test_name", lambda completeness: completeness >= 0.9)
                         .hasCompleteness("bucket_date", lambda completeness: completeness >= 0.98)
                         .hasCompleteness("measurement_start_time", lambda completeness: completeness >= 0.9)
-                        .isContainedIn("probe_cc", ["BR", "CN", "FR", "RU", "GB", "US", "DE", "IN", "AR"])
-                        .hasCompleteness("is_ip_valid", lambda completeness: completeness >= 0.9)
-                        .hasCompleteness("is_url_valid", lambda completeness: completeness >= 0.9)
+                        .isContainedIn("probe_cc", ["BR", "RU", "US", "DE"])
+                        # .hasCompleteness("is_ip_valid", lambda completeness: completeness >= 0.9)
+                        # .hasCompleteness("is_url_valid", lambda completeness: completeness >= 0.9)
                         .hasSize(lambda size: size > 0))
                         .run())
         
@@ -356,7 +339,6 @@ class Transformation(TransformData):
                 df = df.where(F.col("probe_cc").isin(["BR", "RU", "US", "DE"]))
         
         return df    
-        
 s3 = boto3.client('s3')
 bucket_raw = args["bucket_raw"]
 
@@ -364,50 +346,29 @@ response = s3.list_objects_v2(
     Bucket=bucket_raw,
     Delimiter='/'
 )
-def process_raw(prefix):
-    bucket_date = prefix['Prefix'].split('/')[0]
-    print(f"Processando bucket_date: {bucket_date}")
-    extract_data = ExtractData(
-        spark=spark,
-        s3=s3,
-        bucket_raw=bucket_raw,
-        bucket_date=bucket_date,
-        file_type='json'
-    )
-    objects = extract_data.get_objects()
-    df_raw = extract_data.extract(objects)
-
-    transform_data = Transformation(df_raw, spark, bucket_date)
-    df_ooni = transform_data.transform()
-    df_ooni_validated = transform_data.data_quality(df_ooni)
-
-    df_ooni_validated = df_ooni_validated.cache().coalesce(1)
-
-    output_directory = f's3://{args["bucket_trusted"]}/trusted'
-    write_data = DataWriter()
-    write_data.write_parquet(df_ooni_validated, output_directory, ['bucket_date'])
-
-    spark.catalog.clearCache()
-    gc.collect()
-
-def process_raw_with_time_limit(prefix):
-    def time_limit():
-        print(f"Limite de tempo atingido para data {prefix['Prefix'].split('/')[0]}")
-        thread_it.stop()
-    
-    thread_it = threading.Thread(target=process_raw, args=(prefix,))
-    thread_it.start()
-    timer = threading.Timer(60.0, time_limit)
-    timer.start()
-    thread_it.join() 
-    timer.cancel()
 
 if 'CommonPrefixes' in response:
     for prefix in response['CommonPrefixes']:
-        process_raw_with_time_limit(prefix)
+        bucket_date = prefix['Prefix'].split('/')[0]
+        print(f"Processando bucket_date: {bucket_date}")
+
+        extract_data = ExtractData(
+            spark=spark,
+            file_directory=f's3://{bucket_raw}/{bucket_date}/', 
+            file_type='json'
+        )
+
+        df_raw = extract_data.extract()
+
+        transform_data = Transformation(df_raw, spark, bucket_date)
+        df_ooni = transform_data.transform()
+        df_ooni = df_ooni.cache()
+        df_ooni_validated = transform_data.data_quality(df_ooni)
+        df_ooni_validated = df_ooni_validated.cache().coalesce(1)
+        
+        output_directory = f's3://{args["bucket_trusted"]}/trusted'
+        write_data = DataWriter()
+        write_data.write_parquet(df_ooni_validated, output_directory, ['bucket_date'])
 
 else:
     print('Nada a processar! Raw está vazia.')
-
-
-job.commit()
